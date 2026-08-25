@@ -20,7 +20,41 @@ const manualProjects = ref([
   // { name: 'myPage', title: 'myPage', description: '你现在看到的这个个人主页。', tags: ['Vue 3'], highlight: true }
 ])
 
+// 60 秒节流：避免频繁刷新触发 GitHub API 60 次/小时未认证限制
+const CACHE_KEY = 'mypage_projects_cache'
+const CACHE_TTL = 60 * 1000 // 60 秒
+
+function readCache(key) {
+  try {
+    const raw = localStorage.getItem(key)
+    if (!raw) return null
+    const { ts, data } = JSON.parse(raw)
+    if (Date.now() - ts < CACHE_TTL) {
+      return { data, fresh: true }
+    }
+    return { data, fresh: false } // 过期缓存也保留，作为失败兜底
+  } catch {
+    return null
+  }
+}
+
+function writeCache(key, data) {
+  try {
+    localStorage.setItem(key, JSON.stringify({ ts: Date.now(), data }))
+  } catch {
+    // 忽略写入失败（如隐私模式）
+  }
+}
+
 onMounted(async () => {
+  // 命中缓存直接使用，不再发请求
+  const cached = readCache(CACHE_KEY)
+  if (cached?.fresh && Array.isArray(cached.data)) {
+    projects.value = [...manualProjects.value, ...cached.data]
+    loading.value = false
+    return
+  }
+
   try {
     // 从 GitHub API 获取项目
     const dynamicProjects = await getProjects(siteConfig.githubUsername, {
@@ -28,12 +62,17 @@ onMounted(async () => {
       per_page: 30,
       exclude: siteConfig.excludeRepos,
     })
-    
+    writeCache(CACHE_KEY, dynamicProjects)
     // 合并动态和手动项目，手动项目优先
     projects.value = [...manualProjects.value, ...dynamicProjects]
   } catch (e) {
     error.value = e.message || '加载失败'
     console.error('获取项目失败:', e)
+    // 失败时回退到过期缓存（若有），避免完全无数据
+    if (cached?.data) {
+      projects.value = [...manualProjects.value, ...cached.data]
+      error.value = null
+    }
   } finally {
     loading.value = false
   }

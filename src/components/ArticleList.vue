@@ -81,6 +81,59 @@ async function fetchFromRss() {
   throw new Error('RSS 解析失败')
 }
 
+// 60 秒节流：避免频繁刷新打爆 CSDN 代理服务（corsproxy.io 等会被封禁）
+// 调试期：临时禁用节流，每次刷新都重新拉取
+const CACHE_KEY = 'mypage_csdn_articles_cache'
+const CACHE_TTL = 60 * 1000 // 60 秒
+const DISABLE_CACHE = false // 调试期开关：true 时禁用节流，每次刷新都重新拉取
+
+function readCache(key) {
+  if (DISABLE_CACHE) return null
+  try {
+    const raw = localStorage.getItem(key)
+    if (!raw) return null
+    const { ts, data } = JSON.parse(raw)
+    if (Date.now() - ts < CACHE_TTL) {
+      return { data, fresh: true }
+    }
+    return { data, fresh: false }
+  } catch {
+    return null
+  }
+}
+
+function writeCache(key, data) {
+  if (DISABLE_CACHE) return
+  try {
+    localStorage.setItem(key, JSON.stringify({ ts: Date.now(), data }))
+  } catch {
+    // 忽略写入失败
+  }
+}
+
+// 拉取并合并 RSS + API 数据
+async function fetchArticles() {
+  const rssList = await fetchFromRss()
+  let apiList = []
+  try {
+    apiList = await fetchFromCsdnApi()
+  } catch (e) {
+    // API 失败时降级为纯 RSS 数据
+  }
+  if (apiList.length > 0) {
+    const apiMap = new Map(apiList.map(a => [a.url, a]))
+    return rssList.map(rssItem => {
+      const apiItem = apiMap.get(rssItem.url)
+      return {
+        ...rssItem,
+        views: apiItem?.views || 0,
+        title: apiItem?.title || rssItem.title,
+      }
+    })
+  }
+  return rssList
+}
+
 onMounted(async () => {
   if (!siteConfig.csdnId || siteConfig.csdnId === 'YOUR_CSDN_ID') {
     articles.value = fallbackArticles
@@ -88,31 +141,26 @@ onMounted(async () => {
     return
   }
 
+  // 命中缓存直接使用，不再发请求
+  const cached = readCache(CACHE_KEY)
+  if (cached?.fresh && Array.isArray(cached.data)) {
+    articles.value = cached.data
+    loading.value = false
+    return
+  }
+
   try {
-    const rssList = await fetchFromRss()
-    
-    let apiList = []
-    try {
-      apiList = await fetchFromCsdnApi()
-    } catch (e) {
-    }
-    
-    if (apiList.length > 0) {
-      const apiMap = new Map(apiList.map(a => [a.url, a]))
-      articles.value = rssList.map(rssItem => {
-        const apiItem = apiMap.get(rssItem.url)
-        return {
-          ...rssItem,
-          views: apiItem?.views || 0,
-          title: apiItem?.title || rssItem.title,
-        }
-      })
-    } else {
-      articles.value = rssList
-    }
+    const list = await fetchArticles()
+    writeCache(CACHE_KEY, list)
+    articles.value = list
   } catch (e) {
     failed.value = true
-    articles.value = fallbackArticles
+    // 失败时回退到过期缓存（若有），其次静态兜底数据
+    if (cached?.data) {
+      articles.value = cached.data
+    } else {
+      articles.value = fallbackArticles
+    }
   } finally {
     loading.value = false
   }
