@@ -14,6 +14,9 @@ export const siteConfig = {
 
   // CSDN 浏览量徽章文案（可选，留空字符串则不显示）
   csdnViews: '1.3w+ 浏览',
+
+  // 需要从项目列表中过滤掉的仓库名（如个人主页仓库本身）
+  excludeRepos: ['myPage', 'znnnk.github.io'],
 }
 
 // 个人信息 - 以 id 介绍为主的个人页面风格

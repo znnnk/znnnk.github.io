@@ -71,11 +71,14 @@ export function normalizeRepo(repo) {
  * @returns {Promise<Array>} 处理后的项目列表
  */
 export async function getProjects(username, options = {}) {
+  const { exclude = [], ...fetchOptions } = options
   try {
-    const repos = await fetchUserRepos(username, options)
-    return repos.map(normalizeRepo)
+    const repos = await fetchUserRepos(username, fetchOptions)
+    return repos
+      .filter(repo => !exclude.includes(repo.name))
+      .map(normalizeRepo)
   } catch (error) {
     console.error('获取项目列表失败:', error)
-    return [] // 返回空数组以便上层处理
+    return []
   }
 }

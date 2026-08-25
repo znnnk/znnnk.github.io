@@ -26,6 +26,7 @@ onMounted(async () => {
     const dynamicProjects = await getProjects(siteConfig.githubUsername, {
       sort: 'updated',
       per_page: 30,
+      exclude: siteConfig.excludeRepos,
     })
     
     // 合并动态和手动项目，手动项目优先
