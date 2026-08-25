@@ -7,5 +7,5 @@ import vue from '@vitejs/plugin-vue'
 // 见 README 中"部署到 GitHub Pages"一节
 export default defineConfig({
   plugins: [vue()],
-  base: './',
+  base: '/',
 })
