@@ -21,7 +21,7 @@ const githubUrl = computed(
           rel="noopener"
           class="btn btn-primary"
         >
-          GitHub
+          GitHub仓库
         </a>
         <a
           :href="siteConfig.csdnUrl"
@@ -29,7 +29,7 @@ const githubUrl = computed(
           rel="noopener"
           class="btn"
         >
-          CSDN
+          CSDN博客主页
         </a>
       </div>
     </div>

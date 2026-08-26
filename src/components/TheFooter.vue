@@ -13,9 +13,9 @@ const year = new Date().getFullYear()
     <div class="container footer-inner">
       <span>© {{ year }} {{ profile.id }}</span>
       <span class="dot">·</span>
-      <a :href="githubUrl" target="_blank" rel="noopener">GitHub仓库</a>
+      <a :href="githubUrl" target="_blank" rel="noopener">GitHub</a>
       <span class="dot">·</span>
-      <a :href="siteConfig.csdnUrl" target="_blank" rel="noopener">CSDN博客主页</a>
+      <a :href="siteConfig.csdnUrl" target="_blank" rel="noopener">CSDN</a>
       <span class="dot">·</span>
       <span>由 GitHub Pages 提供</span>
     </div>
