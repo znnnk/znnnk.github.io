@@ -16,9 +16,9 @@ function formatViews(n) {
 
 const displayViews = computed(() => {
   if (props.totalViews > 0) {
-    return formatViews(props.totalViews) + ' 浏览'
+    return formatViews(props.totalViews) + ' 浏览量'
   }
-  return siteConfig.csdnViews
+  return '加载中...'
 })
 </script>
 
@@ -29,7 +29,7 @@ const displayViews = computed(() => {
       <span class="badge csdn-views">{{ displayViews }}</span>
     </div>
     <p class="csdn-desc">
-      我的 CSDN 技术博客主页，长期分享后端与中间件实战文章，欢迎访问。
+      我的 CSDN 技术博客主页，长期相关文章，欢迎访问。
     </p>
     <a
       :href="siteConfig.csdnUrl"
