@@ -3,7 +3,7 @@ import { onMounted, ref, computed, watchEffect } from 'vue'
 import { siteConfig } from '../data/config.js'
 import { fallbackArticles } from '../data/articles.js'
 
-const emit = defineEmits(['totalViews'])
+const emit = defineEmits(['totalViews', 'count'])
 
 const articles = ref([])
 const loading = ref(true)
@@ -31,61 +31,76 @@ const totalViews = computed(() => {
   return articles.value.reduce((sum, a) => sum + (a.views || 0), 0)
 })
 
-async function fetchFromCsdnApi() {
-  const apiUrl = `https://blog.csdn.net/community/home-api/v1/get-business-list?page=1&size=100&businessType=blog&orderby=&no498=true&username=${siteConfig.csdnId}`
-  
-  const proxies = [
-    (url) => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
-    (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-    (url) => `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(url)}`,
-  ]
-  
-  let lastError = null
-  for (const buildUrl of proxies) {
-    try {
-      const proxyUrl = buildUrl(apiUrl)
-      const res = await fetch(proxyUrl)
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const text = await res.text()
-      const data = JSON.parse(text)
-      
-      if (data?.data?.list && Array.isArray(data.data.list)) {
-        return data.data.list.map((item) => ({
-          title: item.title?.replace(/<[^>]+>/g, '') || '无标题',
-          url: item.url || `https://blog.csdn.net/${siteConfig.csdnId}/article/details/${item.id}`,
-          publishedAt: '',
-          views: item.viewCount || 0,
-        }))
-      }
-      lastError = new Error('返回格式异常')
-    } catch (e) {
-      lastError = e
-    }
-  }
-  throw lastError || new Error('所有代理均失败')
+// 没有浏览量数据时隐藏「按浏览量」排序
+const hasViews = computed(() => articles.value.some((a) => a.views > 0))
+
+// 数据源优先级：
+// 1) data/articles.json —— 由 GitHub Actions 每天生成并提交的同源静态文件（最可靠）
+// 2) rss2json —— 实测响应带 Access-Control-Allow-Origin: *，可跨域直接 fetch
+// 已移除 corsproxy.io / allorigins / codetabs 三个代理：分别返回 401 / 522 / 522，均已失效；
+// CSDN 的 home-api（文章浏览量）现在强制人机验证，浏览器端无论如何都拿不到，故不再请求。
+const STATIC_JSON = `${import.meta.env.BASE_URL}data/articles.json`
+// 静态数据由定时任务生成，超过这个时长没更新就认为它已过期，回退到 RSS
+const MAX_STALE = 3 * 24 * 60 * 60 * 1000
+
+async function fetchStaticJson() {
+  const res = await fetch(STATIC_JSON)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const data = await res.json()
+  if (!Array.isArray(data.items)) throw new Error('静态数据格式异常')
+  return data
 }
 
 async function fetchFromRss() {
   const rssUrl = `https://blog.csdn.net/${siteConfig.csdnId}/rss/list`
-  const proxy = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(rssUrl)}`
-  const res = await fetch(proxy)
-  const data = await res.json()
-  if (data.status === 'ok' && Array.isArray(data.items)) {
-    return data.items.slice(0, 10).map((it) => ({
+  const url = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(rssUrl)}`
+
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 10000)
+  try {
+    const res = await fetch(url, { signal: ctrl.signal })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const data = await res.json()
+    if (data.status !== 'ok' || !Array.isArray(data.items)) {
+      throw new Error(data.message || 'RSS 解析失败')
+    }
+    return data.items.map((it) => ({
       title: it.title,
       url: it.link,
       publishedAt: (it.pubDate || '').slice(0, 10),
-      views: 0,
+      views: 0, // CSDN 未公开可跨域的浏览量接口
     }))
+  } finally {
+    clearTimeout(timer)
   }
-  throw new Error('RSS 解析失败')
 }
 
-// 60 秒节流：避免频繁刷新打爆 CSDN 代理服务（corsproxy.io 等会被封禁）
-// 调试期：临时禁用节流，每次刷新都重新拉取
+function toArticles(data) {
+  return data.items.map((it) => ({
+    title: it.title,
+    url: it.url || it.link,
+    publishedAt: it.publishedAt || '',
+    views: 0, // CSDN 未公开可跨域的浏览量接口
+  }))
+}
+
+async function loadArticles() {
+  try {
+    const data = await fetchStaticJson()
+    const fresh =
+      data.updatedAt && Date.now() - Date.parse(data.updatedAt) < MAX_STALE
+    if (fresh) return toArticles(data)
+    console.warn('[文章] 静态数据已过期，回退 rss2json')
+  } catch (e) {
+    console.warn('[文章] 静态数据不可用，回退 rss2json:', e.message)
+  }
+  return fetchFromRss()
+}
+
+// 6 小时缓存：RSS 更新频率低，且 rss2json 免费额度有限，避免每次访问都请求
 const CACHE_KEY = 'mypage_csdn_articles_cache'
-const CACHE_TTL = 60 * 1000 // 60 秒
-const DISABLE_CACHE = false // 调试期开关：true 时禁用节流，每次刷新都重新拉取
+const CACHE_TTL = 6 * 60 * 60 * 1000
+const DISABLE_CACHE = false // 调试开关：true 时禁用缓存，每次刷新都重新拉取
 
 function readCache(key) {
   if (DISABLE_CACHE) return null
@@ -111,29 +126,6 @@ function writeCache(key, data) {
   }
 }
 
-// 拉取并合并 RSS + API 数据
-async function fetchArticles() {
-  const rssList = await fetchFromRss()
-  let apiList = []
-  try {
-    apiList = await fetchFromCsdnApi()
-  } catch (e) {
-    // API 失败时降级为纯 RSS 数据
-  }
-  if (apiList.length > 0) {
-    const apiMap = new Map(apiList.map(a => [a.url, a]))
-    return rssList.map(rssItem => {
-      const apiItem = apiMap.get(rssItem.url)
-      return {
-        ...rssItem,
-        views: apiItem?.views || 0,
-        title: apiItem?.title || rssItem.title,
-      }
-    })
-  }
-  return rssList
-}
-
 onMounted(async () => {
   if (!siteConfig.csdnId || siteConfig.csdnId === 'YOUR_CSDN_ID') {
     articles.value = fallbackArticles
@@ -150,7 +142,7 @@ onMounted(async () => {
   }
 
   try {
-    const list = await fetchArticles()
+    const list = await loadArticles()
     writeCache(CACHE_KEY, list)
     articles.value = list
   } catch (e) {
@@ -167,6 +159,9 @@ onMounted(async () => {
 })
 
 watchEffect(() => {
+  if (articles.value.length) {
+    emit('count', articles.value.length)
+  }
   if (totalViews.value > 0) {
     emit('totalViews', totalViews.value)
   }
@@ -186,6 +181,7 @@ watchEffect(() => {
           按时间
         </button>
         <button
+          v-if="hasViews"
           class="sort-btn"
           :class="{ active: sortBy === 'views' }"
           @click="sortBy = 'views'"

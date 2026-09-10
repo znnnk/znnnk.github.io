@@ -1,0 +1,51 @@
+name: Refresh Data
+
+# 每天定时抓取 CSDN 文章，写入 public/data/articles.json 并提交，
+# 提交后再触发 deploy.yml 重新部署；前端优先读这些同源文件，不必再跨域请求第三方接口。
+on:
+  schedule:
+    - cron: '0 22 * * *' # 每天 UTC 22:00（北京时间次日 6:00）
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: refresh-data
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # 脚本只用内置 fetch，无需 npm ci
+      - run: node scripts/fetch-data.mjs
+
+      - name: 提交数据变更
+        id: commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add public/data
+          if git diff --staged --quiet; then
+            echo "数据无变化，跳过提交"
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            git commit -m "chore(data): 更新 CSDN 文章数据 $(date -u +%Y-%m-%d)"
+            git push
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
+      # GITHUB_TOKEN 推送的 commit 不会触发其他 workflow，需显式调用 deploy.yml
+      - name: 触发重新部署
+        if: steps.commit.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run deploy.yml --ref main

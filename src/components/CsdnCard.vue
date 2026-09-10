@@ -7,6 +7,10 @@ const props = defineProps({
     type: Number,
     default: 0,
   },
+  articleCount: {
+    type: Number,
+    default: 0,
+  },
 })
 
 function formatViews(n) {
@@ -14,11 +18,16 @@ function formatViews(n) {
   return n.toLocaleString()
 }
 
+// CSDN 浏览量接口已强制人机验证，无法自动获取：
+// 优先用真实浏览量（若有），其次显示已拉取到的文章数，最后回退到 config 里的静态文案
 const displayViews = computed(() => {
   if (props.totalViews > 0) {
     return formatViews(props.totalViews) + ' 浏览量'
   }
-  return '加载中...'
+  if (props.articleCount > 0) {
+    return props.articleCount + ' 篇近期文章'
+  }
+  return siteConfig.csdnViews || '技术博客'
 })
 </script>
 

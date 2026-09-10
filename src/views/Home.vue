@@ -12,6 +12,7 @@ const projects = ref([])
 const loading = ref(true)
 const error = ref(null)
 const csdnTotalViews = ref(0)
+const csdnArticleCount = ref(0)
 
 // 预留：手动维护的项目列表（作为兜底或补充）
 // 如果希望同时展示手动项目和动态项目，可在此处配置
@@ -121,9 +122,12 @@ onMounted(async () => {
     <section class="container section">
       <h2 class="section-title">技术博客</h2>
       <p class="section-subtitle">我留下的不只是代码，还有记录。</p>
-      <CsdnCard :totalViews="csdnTotalViews" />
+      <CsdnCard :totalViews="csdnTotalViews" :article-count="csdnArticleCount" />
       <div class="blog-list card-base">
-        <ArticleList @totalViews="csdnTotalViews = $event" />
+        <ArticleList
+          @totalViews="csdnTotalViews = $event"
+          @count="csdnArticleCount = $event"
+        />
       </div>
     </section>
   </div>
