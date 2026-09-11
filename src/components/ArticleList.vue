@@ -38,7 +38,8 @@ const hasViews = computed(() => articles.value.some((a) => a.views > 0))
 // 1) data/articles.json —— 由 GitHub Actions 每天生成并提交的同源静态文件（最可靠）
 // 2) rss2json —— 实测响应带 Access-Control-Allow-Origin: *，可跨域直接 fetch
 // 已移除 corsproxy.io / allorigins / codetabs 三个代理：分别返回 401 / 522 / 522，均已失效；
-// CSDN 的 home-api（文章浏览量）现在强制人机验证，浏览器端无论如何都拿不到，故不再请求。
+// CSDN 的 home-api（文章浏览量）强制人机验证，浏览器端无法直接请求；
+// 浏览量由 GitHub Actions 带 Cookie 抓取后写进 data/articles.json，前端直接读。
 const STATIC_JSON = `${import.meta.env.BASE_URL}data/articles.json`
 // 静态数据由定时任务生成，超过这个时长没更新就认为它已过期，回退到 RSS
 const MAX_STALE = 3 * 24 * 60 * 60 * 1000
@@ -80,7 +81,7 @@ function toArticles(data) {
     title: it.title,
     url: it.url || it.link,
     publishedAt: it.publishedAt || '',
-    views: 0, // CSDN 未公开可跨域的浏览量接口
+    views: it.views || 0,
   }))
 }
 
@@ -196,7 +197,7 @@ watchEffect(() => {
       文章列表拉取失败，已显示示例数据。
     </p>
     <ul class="list">
-      <li v-for="a in sortedArticles.slice(0, 8)" :key="a.url" class="item">
+      <li v-for="a in sortedArticles.slice(0, 10)" :key="a.url" class="item">
         <a
           :href="a.url"
           target="_blank"

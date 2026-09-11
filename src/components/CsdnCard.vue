@@ -38,7 +38,7 @@ const displayViews = computed(() => {
       <span class="badge csdn-views">{{ displayViews }}</span>
     </div>
     <p class="csdn-desc">
-      我的 CSDN 技术博客主页，长期相关文章，欢迎访问。
+      我的 CSDN 技术博客主页，相关技术文章欢迎访问。
     </p>
     <a
       :href="siteConfig.csdnUrl"
