@@ -7,19 +7,14 @@ import CsdnCard from '../components/CsdnCard.vue'
 import ArticleList from '../components/ArticleList.vue'
 import { getProjects } from '../services/github.js'
 import { siteConfig } from '../data/config.js'
+// 手动维护的项目列表（作为兜底或补充），在 src/data/projects.js 里编辑
+import { projects as manualProjects } from '../data/projects.js'
 
 const projects = ref([])
 const loading = ref(true)
 const error = ref(null)
 const csdnTotalViews = ref(0)
 const csdnArticleCount = ref(0)
-
-// 预留：手动维护的项目列表（作为兜底或补充）
-// 如果希望同时展示手动项目和动态项目，可在此处配置
-const manualProjects = ref([
-  // 例如：将 myPage 项目置顶
-  // { name: 'myPage', title: 'myPage', description: '你现在看到的这个个人主页。', tags: ['Vue 3'], highlight: true }
-])
 
 // 60 秒节流：避免频繁刷新触发 GitHub API 60 次/小时未认证限制
 const CACHE_KEY = 'mypage_projects_cache'
@@ -51,7 +46,7 @@ onMounted(async () => {
   // 命中缓存直接使用，不再发请求
   const cached = readCache(CACHE_KEY)
   if (cached?.fresh && Array.isArray(cached.data)) {
-    projects.value = [...manualProjects.value, ...cached.data]
+    projects.value = [...manualProjects, ...cached.data]
     loading.value = false
     return
   }
@@ -65,13 +60,13 @@ onMounted(async () => {
     })
     writeCache(CACHE_KEY, dynamicProjects)
     // 合并动态和手动项目，手动项目优先
-    projects.value = [...manualProjects.value, ...dynamicProjects]
+    projects.value = [...manualProjects, ...dynamicProjects]
   } catch (e) {
     error.value = e.message || '加载失败'
     console.error('获取项目失败:', e)
     // 失败时回退到过期缓存（若有），避免完全无数据
     if (cached?.data) {
-      projects.value = [...manualProjects.value, ...cached.data]
+      projects.value = [...manualProjects, ...cached.data]
       error.value = null
     }
   } finally {
