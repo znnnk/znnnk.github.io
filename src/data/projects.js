@@ -7,6 +7,7 @@
 //   tags        标签
 //   demo        在线 Demo 链接（可选，留空字符串则不显示按钮）
 //   highlight   是否置顶
+//   placeholder 仅占位用，有真实仓库时不显示
 // ============================================================
 
 export const projects = [
@@ -27,5 +28,6 @@ export const projects = [
     tags: ['示例'],
     demo: '',
     highlight: false,
+    placeholder: true,
   },
 ]

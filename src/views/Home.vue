@@ -42,11 +42,18 @@ function writeCache(key, data) {
   }
 }
 
+// 手动项目优先；placeholder 条目只在没有真实仓库时显示
+function mergeProjects(dynamic) {
+  const list = Array.isArray(dynamic) ? dynamic : []
+  const manual = manualProjects.filter((p) => !p.placeholder || list.length === 0)
+  return [...manual, ...list]
+}
+
 onMounted(async () => {
   // 命中缓存直接使用，不再发请求
   const cached = readCache(CACHE_KEY)
   if (cached?.fresh && Array.isArray(cached.data)) {
-    projects.value = [...manualProjects, ...cached.data]
+    projects.value = mergeProjects(cached.data)
     loading.value = false
     return
   }
@@ -60,13 +67,13 @@ onMounted(async () => {
     })
     writeCache(CACHE_KEY, dynamicProjects)
     // 合并动态和手动项目，手动项目优先
-    projects.value = [...manualProjects, ...dynamicProjects]
+    projects.value = mergeProjects(dynamicProjects)
   } catch (e) {
     error.value = e.message || '加载失败'
     console.error('获取项目失败:', e)
     // 失败时回退到过期缓存（若有），避免完全无数据
     if (cached?.data) {
-      projects.value = [...manualProjects, ...cached.data]
+      projects.value = mergeProjects(cached.data)
       error.value = null
     }
   } finally {
